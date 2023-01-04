@@ -1,0 +1,360 @@
+<form version="1.1">
+  <label>Resource Monitoring</label>
+  <search>
+    <query>
+          | rest /services/server/info |where "indexer" in(server_roles)| table host | sort host | outputlookup indexer_name.csv
+        </query>
+    <progress>
+      <unset token="indexer_name"></unset>
+    </progress>
+    <done>
+      <set token="indexer_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+        | rest /services/cluster/master/searchheads | appendcols [| rest /services/server/info | where NOT "indexer" in(server_roles) | eval master_name=host] | where NOT label=master_name | fields label|sort label | rename label as host | outputlookup sh_name.csv
+        </query>
+    <progress>
+      <unset token="sh_name"></unset>
+    </progress>
+    <done>
+      <set token="sh_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+          | rest /services/server/info |where NOT "indexer" in(server_roles)| table host | sort host | outputlookup master_name.csv
+        </query>
+    <progress>
+      <unset token="master_name"></unset>
+    </progress>
+    <done>
+      <set token="master_name">true</set>
+    </done>
+  </search>
+  <fieldset submitButton="false">
+    <input type="time" token="time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-1h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="text" token="field1" searchWhenChanged="true">
+      <label>ES Search Head</label>
+    </input>
+  </fieldset>
+  <row id="resource_overview">
+    <panel>
+      <html>
+                <h1>Resource Monitoring(Overview)</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Search Head CPU</title>
+      <single>
+        <search depends="sh_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=sh* host!=$field1$ | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | stats  avg(cpu) as cpu_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Search Head Memory</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=sh* host!=$field1$ | rename data.* as * |stats avg(mem_used) as avg_mem_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">MB</option>
+      </single>
+    </panel>
+        <panel>
+      <title>ES Search Head CPU</title>
+      <single>
+        <search depends="sh_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=$field1$  | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | stats  avg(cpu) as cpu_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ES Search Head Memory</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=$field1$ | rename data.* as * |stats avg(mem_used) as avg_mem_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">MB</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Indexer CPU</title>
+      <single>
+        <search depends="indexer_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=idx* | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | stats avg(cpu) as cpu_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Master CPU</title>
+      <single>
+        <search depends="indexer_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=master* | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | stats avg(cpu) as cpu_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Indexer Memory</title>
+      <single>
+        <search depends="indexer_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=idx* | rename data.* as *|  stats avg(mem_used) as avg_mem_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">MB</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Master Memory</title>
+      <single>
+        <search depends="indexer_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=master* | rename data.* as *|  stats avg(mem_used) as avg_mem_usage</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">MB</option>
+      </single>
+    </panel>
+  </row>
+  <row id="resource_sh">
+    <panel>
+      <html>
+                <h1>Resource Monitoring(Search Heads)</h1>
+            </html>
+    </panel>
+  </row>
+  <row id="resource0">
+    <panel>
+      <title>Hostwide CPU Usage - Search Head</title>
+      <chart>
+        <search depends="sh_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=sh* | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | timechart minspan=10s  avg(cpu) as cpu_usage by host limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Process CPU Usage - Search Head</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index=_introspection sourcetype=splunk_resource_usage component=PerProcess host=sh* | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' | eval sid = 'data.search_props.sid' | eval app = 'data.search_props.app' | eval label = 'data.search_props.label' | eval type = 'data.search_props.type' | eval mode = 'data.search_props.mode' | eval user = 'data.search_props.user' | eval role = 'data.search_props.role' | eval label = if(isnotnull('data.search_props.label'), 'data.search_props.label', "") | eval provenance = if(isnotnull('data.search_props.provenance'), 'data.search_props.provenance', "unknown") | eval search_head = case(isnotnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", 'data.search_props.search_head', isnull('data.search_props.search_head') AND 'data.search_props.role' == "head", "_self", isnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", "_unknown") | eval workload_pool = if(isnotnull('data.workload_pool'), 'data.workload_pool', "UNDEFINED") | eval process_class = case( process=="splunk-optimize","index service", process=="sh" OR process=="ksh" OR process=="bash" OR like(process,"python%") OR process=="powershell","scripted input", process=="mongod", "KVStore") | eval process_class = case( process=="splunkd" AND (like(args,"-p %start%") OR like(args,"service") OR like(args,"%_internal_launch_under_systemd%")),"splunkd server", process=="splunkd" AND isnotnull(sid) AND type=="datamodel acceleration","datamodel acceleration", process=="splunkd" AND isnotnull(sid) AND type=="scheduled","scheduler searches", process=="splunkd" AND isnotnull(sid) AND type=="ad-hoc","ad-hoc searches", process=="splunkd" AND isnotnull(sid) AND type=="summary index","summary index", process=="splunkd" AND (like(args,"fsck%") OR like(args,"recover-metadata%") OR like(args,"cluster_thing")),"index service", process=="splunkd" AND args=="instrument-resource-usage", "scripted input", (like(process,"python%") AND like(args,"%/appserver/mrsparkle/root.py%")) OR like(process,"splunkweb"),"Splunk Web", isnotnull(process_class), process_class) | eval process_class = if(isnull(process_class),"other",process_class) | bin _time span=10s | stats latest(pct_cpu) AS resource_usage_dedup latest(process_class) AS process_class by pid, _time | stats sum(resource_usage_dedup) AS resource_usage by _time, process_class | timechart minspan=10s avg(resource_usage) AS "Average CPU Usage" by process_class</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="resource5">
+    <panel>
+      <title>Hostwide Memory Usage - Search Head</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=sh* | rename data.* as *|  timechart minspan=5m  avg(mem_used) as avg_mem_usage by host limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Process Memory Usage - Search Head</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index=_introspection sourcetype=splunk_resource_usage component=PerProcess host=sh* | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' | eval sid = 'data.search_props.sid' | eval app = 'data.search_props.app' | eval label = 'data.search_props.label' | eval type = 'data.search_props.type' | eval mode = 'data.search_props.mode' | eval user = 'data.search_props.user' | eval role = 'data.search_props.role' | eval label = if(isnotnull('data.search_props.label'), 'data.search_props.label', "") | eval provenance = if(isnotnull('data.search_props.provenance'), 'data.search_props.provenance', "unknown") | eval search_head = case(isnotnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", 'data.search_props.search_head', isnull('data.search_props.search_head') AND 'data.search_props.role' == "head", "_self", isnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", "_unknown") | eval workload_pool = if(isnotnull('data.workload_pool'), 'data.workload_pool', "UNDEFINED") | eval process_class = case( process=="splunk-optimize","index service", process=="sh" OR process=="ksh" OR process=="bash" OR like(process,"python%") OR process=="powershell","scripted input", process=="mongod", "KVStore") | eval process_class = case( process=="splunkd" AND (like(args,"-p %start%") OR like(args,"service") OR like(args,"%_internal_launch_under_systemd%")),"splunkd server", process=="splunkd" AND isnotnull(sid) AND type=="datamodel acceleration","datamodel acceleration", process=="splunkd" AND isnotnull(sid) AND type=="scheduled","scheduler searches", process=="splunkd" AND isnotnull(sid) AND type=="ad-hoc","ad-hoc searches", process=="splunkd" AND isnotnull(sid) AND type=="summary index","summary index", process=="splunkd" AND (like(args,"fsck%") OR like(args,"recover-metadata%") OR like(args,"cluster_thing")),"index service", process=="splunkd" AND args=="instrument-resource-usage", "scripted input", (like(process,"python%") AND like(args,"%/appserver/mrsparkle/root.py%")) OR like(process,"splunkweb"),"Splunk Web", isnotnull(process_class), process_class) | eval process_class = if(isnull(process_class),"other",process_class) | bin _time span=10s | stats latest(mem_used) AS resource_usage_dedup latest(process_class) AS process_class by pid, _time | stats sum(resource_usage_dedup) AS resource_usage by _time, process_class | timechart minspan=10s avg(resource_usage) AS "Average Memory Usage" by process_class</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="resource_idx">
+    <panel>
+      <html>
+                <h1>Resource Monitoring(Indexers)</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Hostwide CPU Usage - Indexer</title>
+      <chart>
+        <search depends="$indexer_name$">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=idx* | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | timechart minspan=10s  avg(cpu) as cpu_usage by host limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Process CPU Usage - Indexer</title>
+      <chart>
+        <search depends="indexer_name">
+          <query>index=_introspection sourcetype=splunk_resource_usage component=PerProcess host=idx*  | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' | eval sid = 'data.search_props.sid' | eval app = 'data.search_props.app' | eval label = 'data.search_props.label' | eval type = 'data.search_props.type' | eval mode = 'data.search_props.mode' | eval user = 'data.search_props.user' | eval role = 'data.search_props.role' | eval label = if(isnotnull('data.search_props.label'), 'data.search_props.label', "") | eval provenance = if(isnotnull('data.search_props.provenance'), 'data.search_props.provenance', "unknown") | eval search_head = case(isnotnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", 'data.search_props.search_head', isnull('data.search_props.search_head') AND 'data.search_props.role' == "head", "_self", isnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", "_unknown") | eval workload_pool = if(isnotnull('data.workload_pool'), 'data.workload_pool', "UNDEFINED") | eval process_class = case( process=="splunk-optimize","index service", process=="sh" OR process=="ksh" OR process=="bash" OR like(process,"python%") OR process=="powershell","scripted input", process=="mongod", "KVStore") | eval process_class = case( process=="splunkd" AND (like(args,"-p %start%") OR like(args,"service") OR like(args,"%_internal_launch_under_systemd%")),"splunkd server", process=="splunkd" AND isnotnull(sid) AND type=="datamodel acceleration","datamodel acceleration", process=="splunkd" AND isnotnull(sid) AND type=="scheduled","scheduler searches", process=="splunkd" AND isnotnull(sid) AND type=="ad-hoc","ad-hoc searches", process=="splunkd" AND isnotnull(sid) AND type=="summary index","summary index", process=="splunkd" AND (like(args,"fsck%") OR like(args,"recover-metadata%") OR like(args,"cluster_thing")),"index service", process=="splunkd" AND args=="instrument-resource-usage", "scripted input", (like(process,"python%") AND like(args,"%/appserver/mrsparkle/root.py%")) OR like(process,"splunkweb"),"Splunk Web", isnotnull(process_class), process_class) | eval process_class = if(isnull(process_class),"other",process_class) | bin _time span=10s | stats latest(pct_cpu) AS resource_usage_dedup latest(process_class) AS process_class by pid, _time | stats sum(resource_usage_dedup) AS resource_usage by _time, process_class | timechart minspan=10s avg(resource_usage) AS "Average CPU Usage" by process_class useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Hostwide Memory Usage - Indexer</title>
+      <chart>
+        <search depends="indexer_name">
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=idx*  | rename data.* as *|  timechart minspan=10s  avg(mem_used) as avg_mem_usage by host limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Process Memory Usage - Indexer</title>
+      <chart>
+        <search depends="$indexer_name$">
+          <query>index=_introspection sourcetype=splunk_resource_usage component=PerProcess host=idx*  | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' | eval sid = 'data.search_props.sid' | eval app = 'data.search_props.app' | eval label = 'data.search_props.label' | eval type = 'data.search_props.type' | eval mode = 'data.search_props.mode' | eval user = 'data.search_props.user' | eval role = 'data.search_props.role' | eval label = if(isnotnull('data.search_props.label'), 'data.search_props.label', "") | eval provenance = if(isnotnull('data.search_props.provenance'), 'data.search_props.provenance', "unknown") | eval search_head = case(isnotnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", 'data.search_props.search_head', isnull('data.search_props.search_head') AND 'data.search_props.role' == "head", "_self", isnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", "_unknown") | eval workload_pool = if(isnotnull('data.workload_pool'), 'data.workload_pool', "UNDEFINED") | eval process_class = case( process=="splunk-optimize","index service", process=="sh" OR process=="ksh" OR process=="bash" OR like(process,"python%") OR process=="powershell","scripted input", process=="mongod", "KVStore") | eval process_class = case( process=="splunkd" AND (like(args,"-p %start%") OR like(args,"service") OR like(args,"%_internal_launch_under_systemd%")),"splunkd server", process=="splunkd" AND isnotnull(sid) AND type=="datamodel acceleration","datamodel acceleration", process=="splunkd" AND isnotnull(sid) AND type=="scheduled","scheduler searches", process=="splunkd" AND isnotnull(sid) AND type=="ad-hoc","ad-hoc searches", process=="splunkd" AND isnotnull(sid) AND type=="summary index","summary index", process=="splunkd" AND (like(args,"fsck%") OR like(args,"recover-metadata%") OR like(args,"cluster_thing")),"index service", process=="splunkd" AND args=="instrument-resource-usage", "scripted input", (like(process,"python%") AND like(args,"%/appserver/mrsparkle/root.py%")) OR like(process,"splunkweb"),"Splunk Web", isnotnull(process_class), process_class) | eval process_class = if(isnull(process_class),"other",process_class) | bin _time span=10s | stats latest(mem_used) AS resource_usage_dedup latest(process_class) AS process_class by pid, _time | stats sum(resource_usage_dedup) AS resource_usage by _time, process_class | timechart minspan=10s avg(resource_usage) AS "Average Memory Usage" by process_class useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="resource_master">
+    <panel>
+      <html>
+                <h1>Resource Monitoring(Master)</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Hostwide CPU Usage - Master</title>
+      <chart>
+        <search>
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=master* | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | timechart minspan=10s  avg(cpu) as cpu_usage by host limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Process CPU Usage - Master</title>
+      <chart>
+        <search>
+          <query>index=_introspection sourcetype=splunk_resource_usage component=PerProcess host=master*  | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' | eval sid = 'data.search_props.sid' | eval app = 'data.search_props.app' | eval label = 'data.search_props.label' | eval type = 'data.search_props.type' | eval mode = 'data.search_props.mode' | eval user = 'data.search_props.user' | eval role = 'data.search_props.role' | eval label = if(isnotnull('data.search_props.label'), 'data.search_props.label', "") | eval provenance = if(isnotnull('data.search_props.provenance'), 'data.search_props.provenance', "unknown") | eval search_head = case(isnotnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", 'data.search_props.search_head', isnull('data.search_props.search_head') AND 'data.search_props.role' == "head", "_self", isnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", "_unknown") | eval workload_pool = if(isnotnull('data.workload_pool'), 'data.workload_pool', "UNDEFINED") | eval process_class = case( process=="splunk-optimize","index service", process=="sh" OR process=="ksh" OR process=="bash" OR like(process,"python%") OR process=="powershell","scripted input", process=="mongod", "KVStore") | eval process_class = case( process=="splunkd" AND (like(args,"-p %start%") OR like(args,"service") OR like(args,"%_internal_launch_under_systemd%")),"splunkd server", process=="splunkd" AND isnotnull(sid) AND type=="datamodel acceleration","datamodel acceleration", process=="splunkd" AND isnotnull(sid) AND type=="scheduled","scheduler searches", process=="splunkd" AND isnotnull(sid) AND type=="ad-hoc","ad-hoc searches", process=="splunkd" AND isnotnull(sid) AND type=="summary index","summary index", process=="splunkd" AND (like(args,"fsck%") OR like(args,"recover-metadata%") OR like(args,"cluster_thing")),"index service", process=="splunkd" AND args=="instrument-resource-usage", "scripted input", (like(process,"python%") AND like(args,"%/appserver/mrsparkle/root.py%")) OR like(process,"splunkweb"),"Splunk Web", isnotnull(process_class), process_class) | eval process_class = if(isnull(process_class),"other",process_class) | bin _time span=10s | stats latest(pct_cpu) AS resource_usage_dedup latest(process_class) AS process_class by pid, _time | stats sum(resource_usage_dedup) AS resource_usage by _time, process_class | timechart minspan=10s avg(resource_usage) AS "Average CPU Usage" by process_class useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Hostwide Memory Usage - Master</title>
+      <chart>
+        <search>
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=Hostwide host=master*  | rename data.* as *|  timechart minspan=10s  avg(mem_used) as avg_mem_usage by host limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Process Memory Usage - Master</title>
+      <chart>
+        <search>
+          <query>index=_introspection sourcetype=splunk_resource_usage component=PerProcess host=master*  | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' | eval sid = 'data.search_props.sid' | eval app = 'data.search_props.app' | eval label = 'data.search_props.label' | eval type = 'data.search_props.type' | eval mode = 'data.search_props.mode' | eval user = 'data.search_props.user' | eval role = 'data.search_props.role' | eval label = if(isnotnull('data.search_props.label'), 'data.search_props.label', "") | eval provenance = if(isnotnull('data.search_props.provenance'), 'data.search_props.provenance', "unknown") | eval search_head = case(isnotnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", 'data.search_props.search_head', isnull('data.search_props.search_head') AND 'data.search_props.role' == "head", "_self", isnull('data.search_props.search_head') AND 'data.search_props.role' == "peer", "_unknown") | eval workload_pool = if(isnotnull('data.workload_pool'), 'data.workload_pool', "UNDEFINED") | eval process_class = case( process=="splunk-optimize","index service", process=="sh" OR process=="ksh" OR process=="bash" OR like(process,"python%") OR process=="powershell","scripted input", process=="mongod", "KVStore") | eval process_class = case( process=="splunkd" AND (like(args,"-p %start%") OR like(args,"service") OR like(args,"%_internal_launch_under_systemd%")),"splunkd server", process=="splunkd" AND isnotnull(sid) AND type=="datamodel acceleration","datamodel acceleration", process=="splunkd" AND isnotnull(sid) AND type=="scheduled","scheduler searches", process=="splunkd" AND isnotnull(sid) AND type=="ad-hoc","ad-hoc searches", process=="splunkd" AND isnotnull(sid) AND type=="summary index","summary index", process=="splunkd" AND (like(args,"fsck%") OR like(args,"recover-metadata%") OR like(args,"cluster_thing")),"index service", process=="splunkd" AND args=="instrument-resource-usage", "scripted input", (like(process,"python%") AND like(args,"%/appserver/mrsparkle/root.py%")) OR like(process,"splunkweb"),"Splunk Web", isnotnull(process_class), process_class) | eval process_class = if(isnull(process_class),"other",process_class) | bin _time span=10s | stats latest(mem_used) AS resource_usage_dedup latest(process_class) AS process_class by pid, _time | stats sum(resource_usage_dedup) AS resource_usage by _time, process_class | timechart minspan=10s avg(resource_usage) AS "Average Memory Usage" by process_class useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</form>

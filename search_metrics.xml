@@ -1,0 +1,748 @@
+<dashboard version="1.1">
+<label>Search Metrics</label>
+  <search>
+    <query>
+          | rest /services/server/info |where "indexer" in(server_roles)| table host | sort host | outputlookup indexer_name.csv
+        </query>
+    <progress>
+      <unset token="indexer_name"></unset>
+    </progress>
+    <done>
+      <set token="indexer_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+        | rest /services/cluster/master/searchheads | appendcols [| rest /services/server/info | where NOT "indexer" in(server_roles) | eval master_name=host] | where NOT label=master_name | fields label|sort label | rename label as host | outputlookup sh_name.csv
+        </query>
+    <progress>
+      <unset token="sh_name"></unset>
+    </progress>
+    <done>
+      <set token="sh_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+          | rest /services/server/info |where NOT "indexer" in(server_roles)| table host | sort host | outputlookup master_name.csv
+        </query>
+    <progress>
+      <unset token="master_name"></unset>
+    </progress>
+    <done>
+      <set token="master_name">true</set>
+    </done>
+  </search>
+  <fieldset submitButton="false">
+    <input type="time" token="time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-1h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row id="search">
+    <panel>
+      <html>
+                <h2>
+                    <b>Overall Search Metrics</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row id="search_concurrency">
+    <panel>
+      <title>Search Concurrency</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index="_introspection" host=sh* sourcetype=splunk_resource_usage  component=PerProcess data.search_props.role=head data.search_props.sid::*  | eval sid = 'data.search_props.sid'  | bin _time span=10s | stats dc(sid) AS distinct_search_count by _time  | timechart minspan=10s avg(distinct_search_count) as avg_search_concurrency</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Search Concurrency by type</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index="_introspection" host=sh* sourcetype=splunk_resource_usage  component=PerProcess data.search_props.role=head data.search_props.sid::*  | eval sid = 'data.search_props.sid'  | eval type = 'data.search_props.type' | bin _time span=10s | stats dc(sid) AS distinct_search_count by _time, type  | timechart minspan=10s avg(distinct_search_count) as avg_search_concurrency by type</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Adhoc Search Count per Hour</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name="" earliest=-2h latest=-1h 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-2h") 
+          | append [search index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name="" earliest=-1h latest=now 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-1h") ]
+          </query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <title>DMA Search Count per Hour</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_* earliest=-2h latest=-1h 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-2h") 
+          | append [search index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_* earliest=-1h latest=now 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-1h") ]
+          </query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ES Correlation Search Count per Hour</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule" earliest=-2h latest=-1h 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-2h") 
+          | append [search index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule" earliest=-1h latest=now 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-1h") ]
+          </query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ES Saved Search Count per Hour</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!="" earliest=-2h latest=-1h 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-2h") 
+          | append [search index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!="" earliest=-1h latest=now 
+          | stats count as search_count_per_hour |eval _time=relative_time(now(), "-1h") ]
+          </query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Adhoc Search Runtime(s)</title>
+      <table depends="$table_show$">
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=""
+| stats perc90(total_run_time) as perc90_run_time median(total_run_time) as median_run_time
+| eval perc90_run_time=round(perc90_run_time,2) | eval median_run_time=round(median_run_time, 2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <done>
+            <set token="Adhoc90">$result.perc90_run_time$</set>
+            <set token="Adhoc50">$result.median_run_time$</set>
+          </done>
+        </search>
+      </table>
+      <single depends="$Adhoc90$, $Adhoc50$">
+        <search depends="$sh_name$">
+          <query>index=_audit host=sh* info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name="" | stats avg(total_run_time) as avg_run_time
+| eval avg_run_time=round(avg_run_time,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">s</option>
+        <option name="underLabel">median: $Adhoc50$s, perc90: $Adhoc90$s</option>
+      </single>
+    </panel>
+    <panel>
+      <title>DMA Search Runtime(s)</title>
+      <table depends="$table_show$">
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_*
+        | stats perc90(total_run_time) as perc90_run_time median(total_run_time) as median_run_time
+        | eval perc90_run_time=round(perc90_run_time, 2) | eval median_run_time=round(median_run_time, 2)
+          </query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <done>
+            <set token="DMA90">$result.perc90_run_time$</set>
+            <set token="DMA50">$result.median_run_time$</set>
+          </done>
+        </search>
+      </table>
+      <single depends="$DMA90$, $DMA50$">
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_*
+| stats avg(total_run_time) as avg_run_time
+| eval avg_run_time=round(avg_run_time,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">s</option>
+        <option name="underLabel">median: $DMA50$s, perc90: $DMA90$s</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ES Correlation Search Runtime(s)</title>
+      <table depends="$table_show$">
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule"
+| stats perc90(total_run_time) as perc90_run_time median(total_run_time) as median_run_time
+| eval perc90_run_time=round(perc90_run_time,2) | eval median_run_time=round(median_run_time, 2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <done>
+            <set token="Corr90">$result.perc90_run_time$</set>
+            <set token="Corr50">$result.median_run_time$</set>
+          </done>
+        </search>
+      </table>
+      <single depends="$Corr90$, $Corr50$">
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule"
+| stats avg(total_run_time) as avg_run_time
+| eval avg_run_time=round(avg_run_time,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">s</option>
+        <option name="underLabel">median: $Corr50$s, perc90: $Corr90$s</option>
+      </single>
+    </panel>
+    <panel>
+      <title>ES Saved Search Runtime(s)</title>
+      <table depends="$table_show$">
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed host=sh* search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!=""
+| stats perc90(total_run_time) as perc90_run_time median(total_run_time) as median_run_time
+| eval perc90_run_time=round(perc90_run_time,2) | eval median_run_time=round(median_run_time, 2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+          <done>
+            <set token="Save90">$result.perc90_run_time$</set>
+            <set token="Save50">$result.median_run_time$</set>
+          </done>
+        </search>
+      </table>
+      <single depends="$Save90$, $Save50$">
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed host=sh* search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!=""
+| stats avg(total_run_time) as avg_run_time
+| eval avg_run_time=round(avg_run_time,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unit">s</option>
+        <option name="underLabel">median: $Save50$s, perc90: $Save90$s</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Search Count per Search Head</title>
+        <search depends="$sh_name$">
+          <query> 
+            search index=_audit action=search info=completed  search_id!=*rsa_*  search_id!=*subsearch*  is_realtime=0 host=sh* | stats count as search_count_per_sh by host 
+          </query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Search Runtime per Search Head</title>
+        <search depends="$sh_name$">
+          <query>search index=_audit action=search info=completed host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name!=""
+              | chart avg(total_run_time) as avg_run_time by host
+              | eval avg_run_time=round(avg_run_time,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.legend.placement">top</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Adhoc Search Runtime Trend</title>
+      <chart>
+        <search depends="sh_name">
+          <query>index=_audit action=search info=completed host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=""  search="'search  index*'" | timechart  avg(total_run_time) as avg_run_time by search useother=f limit=0  | eval  avg_run_time=round(avg_run_time,2)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.showDataLabels">none</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.mode">seriesCompare</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="search0">
+    <panel>
+      <html>
+                <h2>
+                    <b>DMA Search Metrics</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>DMA Search Runtime Trend</title>
+      <chart>
+        <search depends="sh_name">
+          <query>index=_audit action=search info=completed savedsearch_name=*_ACCELERATE_* host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 | eval savedsearch_name = rtrim(ltrim(savedsearch_name, "_ACCELERATE_DM"), "_ACCELERATE_") | timechart span=10m   avg(total_run_time) as avg_run_time by savedsearch_name useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="search1">
+    <panel>
+      <title>DMA Search Performance</title>
+      <table>
+        <search depends="sh_name">
+          <query>index=_audit action=search info=completed savedsearch_name=*_ACCELERATE_* host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 |fillnull value=0
+                        | stats count as success_count, avg(total_run_time) as avg_run_time, perc90(total_run_time) as perc90_run_time, median(total_run_time) as median_run_time, avg(scan_count) as avg_scan_count, avg(event_count) as avg_event_count, avg(result_count) as avg_result_count by savedsearch_name
+                        | eval avg_run_time=round(avg_run_time,2)
+                        | eval perc90_run_time=round(perc90_run_time,2)
+                        | eval median_run_time=round(median_run_time, 2)
+                        | eval avg_scan_count=round(avg_scan_count,2)
+                        | eval avg_event_count=round(avg_event_count,2)
+                        | eval avg_result_count=round(avg_result_count,2)
+                        | eval savedsearch_name = rtrim(ltrim(savedsearch_name, "_ACCELERATE_DM"), "_ACCELERATE_")
+                        | table savedsearch_name avg_run_time perc90_run_time median_run_time avg_scan_count avg_event_count avg_result_count success_count |sort -avg_run_time</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>DMA Search Resource Usage</title>
+      <table>
+        <search depends="$indexer_name$, $sh_name$">
+          <query>index=_introspection host=sh* OR host=idx* component=PerProcess data.search_props.label=*_ACCELERATE_*
+                        | rename data.search_props.label as savedsearch_name
+                        | rename data.search_props.role as role
+                        | rename data.pct_cpu as cpu
+                        | rename data.mem_used as mem_used
+                        | rename data.process as process
+                        | eval idx_cpu = if(role=="peer", cpu, 0)
+                        | eval idx_memory = if(role=="peer", mem_used, 0)
+                        | eval sh_cpu = if(role=="head", cpu, 0)
+                        | eval sh_memory = if(role=="head", mem_used, 0)
+                        | stats avg(idx_cpu) as avg_idx_cpu, avg(sh_cpu) as avg_sh_cpu, max(idx_memory) as max_idx_memory, max(sh_memory) as max_sh_memory by savedsearch_name
+                        | fillnull value=0
+                        | eval avg_idx_cpu=round(avg_idx_cpu,2)."%"
+                        | eval avg_sh_cpu=round(avg_sh_cpu,2)."%"
+                        | eval max_idx_memory=round(max_idx_memory,2)
+                        | eval max_sh_memory=round(max_sh_memory,2)
+                        | eval savedsearch_name = rtrim(ltrim(savedsearch_name, "_ACCELERATE_DM"), "_ACCELERATE_")
+                        | sort -avg_idx_cpu</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="dma_skip">
+    <panel>
+      <title>DMA Search Skip Rate</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index=_internal sourcetype=scheduler source=*/scheduler*.log  host=sh* search_type=datamodel_acceleration savedsearch_name=* status!=*_remote* | stats distinct_count(scheduled_time) as total_count, count(eval(status="success")) as success_count by savedsearch_name | stats sum(total_count) as total_count, sum(success_count) as success_count | eval failed_count=total_count-success_count | eval failed_ratio=failed_count/total_count*100 | fields failed_ratio  | eval failed_ratio = if(failed_ratio&gt;0,failed_ratio,0)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="height">306</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="underLabel">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>DMA Search Skip Detail</title>
+      <table>
+        <search depends="sh_name">
+          <query>index=_internal sourcetype=scheduler source=*/scheduler.log*  host=sh* search_type=datamodel_acceleration savedsearch_name=* status!=*_remote* | stats distinct_count(scheduled_time) as total_count, count(eval(status="success")) as success_count,  last(reason) as failed_reason, last(concurrency_context) as concurrency_context, last(concurrency_limit) as concurrency_limit by savedsearch_name | eval failed_count=total_count-success_count | eval failed_ratio=failed_count/total_count| search failed_ratio&gt;0  |sort -failed_ratio</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="search2">
+    <panel>
+      <html>
+                <h2>
+                    <b>Correlation Search Metrics</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Correlation Search Runtime Trend</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed savedsearch_name!=*_ACCELERATE_* savedsearch_name="*- Rule" host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 | timechart span=10m   avg(total_run_time) as avg_run_time by savedsearch_name useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="search3">
+    <panel>
+      <title>Correlation Search Performance</title>
+      <table>
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed savedsearch_name="*- Rule"  host=sh* search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 |fillnull value=0
+                        | stats count as success_count, avg(total_run_time) as avg_run_time, perc90(total_run_time) as perc90_run_time, median(total_run_time) as median_run_time, avg(scan_count) as avg_scan_count, avg(event_count) as avg_event_count, avg(result_count) as avg_result_count, avg(searched_buckets) as avg_searched_buckets by savedsearch_name
+                        | eval avg_run_time=round(avg_run_time,2)
+                        | eval perc90_run_time=round(perc90_run_time,2)
+                        | eval median_run_time=round(median_run_time, 2) 
+                        | eval avg_scan_count=round(avg_scan_count,2)
+                        | eval avg_event_count=round(avg_event_count,2)
+                        | eval avg_result_count=round(avg_result_count,2)
+                        | table savedsearch_name avg_run_time perc90_run_time median_run_time avg_scan_count avg_event_count avg_result_count success_count
+                        | sort -avg_run_time</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Correlation Search Resource Usage</title>
+      <table>
+        <search depends="$sh_name$, $indexer_name$">
+          <query>index=_introspection host=sh* OR host=idx* component=PerProcess "data.process_type"=search data.search_props.type=scheduled data.search_props.label="*- Rule"
+                        | rename data.search_props.label as savedsearch_name
+                        | rename data.search_props.role as role
+                        | rename data.pct_cpu as cpu
+                        | rename data.mem_used as mem_used
+                        | rename data.process as process
+                        | eval idx_cpu = if(role=="peer", cpu,0)
+                        | eval idx_memory = if(role=="peer", mem_used,0)
+                        | eval sh_cpu = if(role=="head", cpu,0)
+                        | eval sh_memory = if(role=="head", mem_used,0)
+                        | stats avg(idx_cpu) as avg_idx_cpu, avg(sh_cpu) as avg_sh_cpu, max(idx_memory) as max_idx_memory, max(sh_memory) as max_sh_memory by savedsearch_name
+                        | fillnull value=0
+                        | eval avg_idx_cpu=round(avg_idx_cpu,2)."%"
+                        | eval avg_sh_cpu=round(avg_sh_cpu,2)."%"
+                        | eval max_idx_memory=round(max_idx_memory,2)
+                        | eval max_sh_memory=round(max_sh_memory,2)
+                        | sort -avg_idx_cpu</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="cs_skip">
+    <panel>
+      <title>Correlation Search Skip Rate</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index=_internal sourcetype=scheduler source=*/scheduler*.log  host=sh* search_type!=datamodel_acceleration savedsearch_name="* - Rule" savedsearch_name!="Access - Brute Force Access Behavior Detected - Rule"  status!=*_remote* | stats distinct_count(scheduled_time) as total_count, count(eval(status="success")) as success_count by savedsearch_name | stats sum(total_count) as total_count, sum(success_count) as success_count | eval failed_count=total_count-success_count | eval failed_ratio=failed_count/total_count*100 | fields failed_ratio  | eval failed_ratio = if(failed_ratio&gt;0,failed_ratio,0)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="height">303</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="underLabel">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Correlation Search Skip Detail</title>
+      <table>
+        <search depends="$sh_name$">
+          <query>index=_internal sourcetype=scheduler source=*/scheduler.log*  host=sh* search_type!=datamodel_acceleration savedsearch_name="* - Rule" status!=*_remote* | stats distinct_count(scheduled_time) as total_count, count(eval(status="success")) as success_count,  last(reason) as failed_reason, last(concurrency_context) as concurrency_context, last(concurrency_limit) as concurrency_limit by savedsearch_name | eval failed_count=total_count-success_count | eval failed_ratio=failed_count/total_count| search failed_ratio&gt;0 |sort -failed_ratio</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="ss_panel">
+    <panel>
+      <html>
+                <h2>
+                    <b>Saved Search Metrics</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Saved Search Runtime Trend</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index=_audit action=search info=completed savedsearch_name!=*_ACCELERATE_* savedsearch_name!="*- Rule" host=sh*  search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 | timechart span=10m   avg(total_run_time) as avg_run_time by savedsearch_name useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="search4">
+    <panel>
+      <title>Saved Search Performance</title>
+      <table>
+        <search depends="sh_name">
+          <query>index=_audit action=search info=completed savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!="" host=sh* search_id!=*rsa_* search_id!=*subsearch_* |fillnull value=0
+                        | stats count as success_count, avg(total_run_time) as avg_run_time,  perc90(total_run_time) as perc90_run_time, median(total_run_time) as median_run_time, avg(scan_count) as avg_scan_count, avg(event_count) as avg_event_count, avg(result_count) as avg_result_count, avg(searched_buckets) as avg_searched_buckets by savedsearch_name
+                        | eval avg_run_time=round(avg_run_time,2)
+                        | eval perc90_run_time=round(perc90_run_time,2)
+                        | eval median_run_time=round(median_run_time, 2) 
+                        | eval avg_scan_count=round(avg_scan_count,2)
+                        | eval avg_event_count=round(avg_event_count,2)
+                        | eval avg_result_count=round(avg_result_count,2)
+                        | table savedsearch_name avg_run_time perc90_run_time median_run_time avg_scan_count avg_event_count avg_result_count success_count
+                        | sort -avg_run_time</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Saved Search Resource Usage</title>
+      <table>
+        <search depends="$sh_name$, $indexer_name$">
+          <query>index=_introspection host=sh* OR host=idx* component=PerProcess "data.process_type"=search data.search_props.type=scheduled data.search_props.label!="*- Rule"
+                        | rename data.search_props.label as savedsearch_name
+                        | rename data.search_props.role as role
+                        | rename data.pct_cpu as cpu
+                        | rename data.mem_used as mem_used
+                        | rename data.process as process
+                        | eval idx_cpu = if(role=="peer", cpu,0)
+                        | eval idx_memory = if(role=="peer", mem_used,0)
+                        | eval sh_cpu = if(role=="head", cpu,0)
+                        | eval sh_memory = if(role=="head", mem_used,0)
+                        | stats avg(idx_cpu) as avg_idx_cpu, avg(sh_cpu) as avg_sh_cpu, max(idx_memory) as max_idx_memory, max(sh_memory) as max_sh_memory by savedsearch_name
+                        | fillnull value=0
+                        | eval avg_idx_cpu=round(avg_idx_cpu,2)."%"
+                        | eval avg_sh_cpu=round(avg_sh_cpu,2)."%"
+                        | eval max_idx_memory=round(max_idx_memory,2)
+                        | eval max_sh_memory=round(max_sh_memory,2)
+                        | sort -avg_idx_cpu</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="ss_skip">
+    <panel>
+      <title>Saved Search Skip Rate</title>
+      <single>
+        <search depends="$sh_name$">
+          <query>index=_internal sourcetype=scheduler source=*/scheduler*.log  host=sh* search_type!=datamodel_acceleration savedsearch_name!="* - Rule" savedsearch_name=* status!=*_remote* | stats distinct_count(scheduled_time) as total_count, count(eval(status="success")) as success_count by savedsearch_name | stats sum(total_count) as total_count, sum(success_count) as success_count | eval failed_count=total_count-success_count | eval failed_ratio=failed_count/total_count*100 | fields failed_ratio | eval failed_ratio = if(failed_ratio&gt;0,failed_ratio,0)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="height">306</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="underLabel">%</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Saved Search Skip Detail</title>
+      <table>
+        <search depends="$sh_name$">
+          <query>index=_internal sourcetype=scheduler source=*/scheduler.log*  host=sh* search_type!=datamodel_acceleration savedsearch_name!="* - Rule" savedsearch_name=* status!=*_remote* | stats distinct_count(scheduled_time) as total_count, count(eval(status="success")) as success_count,  last(reason) as failed_reason, last(concurrency_context) as concurrency_context, last(concurrency_limit) as concurrency_limit by savedsearch_name | eval failed_count=total_count-success_count | eval failed_ratio=failed_count/total_count| search failed_ratio&gt;0 |sort -failed_ratio</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Long-running Saved Searches</title>
+      <table>
+        <search depends="$sh_name$">
+          <query>
+            index=_audit action=search info=completed savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!="" host=sh* search_id!=*rsa_* search_id!=*subsearch_* 
+          | stats min(_time) as _time, values(user) as user, max(total_run_time) as total_run_time, first(savedsearch_name) as search_name  by search_id
+          | fields search_name, total_run_time, _time, user
+          | eval _time = strftime(_time, "%m/%d/%Y %H:%M:%S %z")
+          | sort - total_run_time
+          | fields search_name, total_run_time, _time, user
+          | rename search_name as "Savedsearch Name", total_run_time as "Search Runtime", _time as "Search Start", user as "User"
+          | fieldformat "Search Runtime" = round('Search Runtime', 2)."s"
+          </query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">5</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="adhoc_panel">
+    <panel>
+      <html>
+                <h2>
+                    <b>Adhoc Search Metrics</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Adhoc Search Performance</title>
+      <table>
+        <search depends="$sh_name$">
+          <query>index=_audit action=search host=sh* info=completed savedsearch_name=""  search_id!=*rsa_*  search_id!=*subsearch*  is_realtime=0 | stats count as search_count, avg(total_run_time) as avg_run_time, perc90(total_run_time) as perc90_run_time, median(total_run_time) as median_run_time, avg(scan_count) as avg_scan_count, avg(event_count) as avg_event_count, avg(result_count) as avg_result_count, avg(searched_buckets) as avg_searched_buckets, avg(search_startup_time) as avg_search_startup_time</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Frequently Run Adhoc Searches</title>
+      <table>
+        <search depends="$sh_name$">
+          <query>
+            index=_audit action=search host=sh* info=completed savedsearch_name=""  search_id!=*rsa_*  search_id!=*subsearch*  is_realtime=0 
+          | eval user = if(user="n/a", null(), user)
+          | stats min(_time) as _time, values(user) as user, max(total_run_time) as total_run_time, first(search) as search, first(apiStartTime) as apiStartTime, first(apiEndTime) as apiEndTime by search_id | stats count median(total_run_time) as median_runtime max(total_run_time) as max_runtime values(user) as user by search
+            | eval median_runtime=if(isnotnull(median_runtime), median_runtime, "-")
+            | eval max_runtime=if(isnotnull(max_runtime), max_runtime, "-")
+            | sort - count
+            | rename search as "Search", count as "Count", median_runtime as "Median Runtime", max_runtime as "Max Runtime", user as User
+            | fieldformat "Median Runtime" = round('Median Runtime', 2)."s"
+            | fieldformat "Max Runtime" = round('Max Runtime', 2)."s"
+          </query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">5</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="realtime_panel">
+    <panel>
+      <html>
+                <h2>
+                    <b>Realtime Search Metrics</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Realtime Scheduled Search Performance- Search Head</title>
+      <table>
+        <search>
+          <query>index="_introspection" sourcetype=splunk_resource_usage component=PerProcess data.search_props.role=head data.search_props.provenance=scheduler data.search_props.sid::*  (data.search_props.mode=RT OR  data.search_props.mode="RT indexed") | eval sid = 'data.search_props.sid' | eval label='data.search_props.label' | eval pct_cpu = 'data.pct_cpu' | eval memory_used = 'data.mem_used' | eval scan_count = 'data.search_props.scan_count' | eval elapsed = 'data.elapsed' | eval scan_count_per_sec = scan_count/elapsed |  eval mode = 'data.search_props.mode'| eval user = 'data.search_props.user'  | stats dc(sid) AS distinct_search_count, avg(scan_count_per_sec) as scan_count_per_sec, avg(pct_cpu) as avg_cpu, avg(memory_used) as avg_memory_used , last(mode) as mode, last(user) as user by label</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Realtime Adhoc Search Performance- Search Head</title>
+      <table>
+        <search>
+          <query>index="_introspection"  component=PerProcess data.search_props.role=head data.search_props.type=ad-hoc data.search_props.sid::*  (data.search_props.mode=RT OR  data.search_props.mode="RT indexed") | eval sid = 'data.search_props.sid' | eval label='data.search_props.label' | eval pct_cpu = 'data.pct_cpu' | eval memory_used = 'data.mem_used' | eval scan_count = 'data.search_props.scan_count' | eval elapsed = 'data.elapsed' | eval scan_count_per_sec = scan_count/elapsed | eval mode = 'data.search_props.mode'| eval user = 'data.search_props.user'  | stats last(scan_count_per_sec) as scan_count_per_sec, avg(pct_cpu) as avg_cpu, avg(memory_used) as avg_memory_used, last(mode) as mode, last(user) as user  by sid</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </table>
+    </panel>
+  </row>
+</dashboard>

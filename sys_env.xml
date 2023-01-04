@@ -1,0 +1,327 @@
+<dashboard version="1.1">
+<label>System Env</label>
+  <search>
+    <query>
+          | rest /services/server/info |where "indexer" in(server_roles)| table host | sort host | outputlookup indexer_name.csv
+        </query>
+    <progress>
+      <unset token="indexer_name"></unset>
+    </progress>
+    <done>
+      <set token="indexer_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+        | rest /services/cluster/master/searchheads | appendcols [| rest /services/server/info | where NOT "indexer" in(server_roles) | eval master_name=host] | where NOT label=master_name | fields label|sort label | rename label as host | outputlookup sh_name.csv
+        </query>
+    <progress>
+      <unset token="sh_name"></unset>
+    </progress>
+    <done>
+      <set token="sh_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+          | rest /services/server/info |where NOT "indexer" in(server_roles)| table host | sort host | outputlookup master_name.csv
+        </query>
+    <progress>
+      <unset token="master_name"></unset>
+    </progress>
+    <done>
+      <set token="master_name">true</set>
+    </done>
+  </search>
+  <fieldset submitButton="false">
+    <input type="time" token="time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-1h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row id="sys_env">
+    <panel>
+      <html>
+                <h1>System Environment and Data</h1>
+            </html>
+    </panel>
+  </row>
+  <row id="sys_env1">
+    <panel>
+      <html>
+                <h2>
+                    <b>System Environment</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+
+  <row id="sys1">
+    <panel>
+      <title>Splunk Cluster</title>
+      <table>
+        <search>
+          <query>| rest /services/server/info
+                        | rename splunk_server as Splunk_Server
+                        | rename cpu_arch as CPU_Arch
+                        | rename numberOfCores as Physical_Cores
+                        | rename numberOfVirtualCores as Virtual_Cores
+                        | rename physicalMemoryMB as Memory_MB
+                        | rename os_name as OS
+                        | rename os_version as OS_Version
+                        | rename version as Splunk_Version
+                        | rename build as Splunk_Build
+                        | table Splunk_Server,CPU_Arch,Physical_Cores,Virtual_Cores,Memory_MB,OS,OS_Version,Splunk_Version,Splunk_Build</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Installed Apps and Add-ons</title>
+      <table>
+        <search>
+          <query>| rest /services/apps/local splunk_server=local
+                        | search build !=''
+                        | rename title as App_Name
+                        | eval Enabled=if(disabled==0,"Yes","No" )
+                        | table splunk_server,App_Name,Enabled,version,build</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="sys2">
+    <panel>
+      <html>
+                <h2>
+                    <b>Data Inputs</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row id="sys3">
+    <panel>
+      <title>Ingesting Volume per Day</title>
+      <single>
+        <search depends="$indexer_name$">
+          <query>
+            index="_internal" source="*/metrics.log*"  group=per_sourcetype_thruput [|inputlookup indexer_name.csv] earliest=-1d
+            | eval gb=kb/1024/1024 
+            | stats sum(gb) as total_volume
+            | eval total_volume=round(total_volume,2)
+          </query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="height">399</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="underLabel">GB/day</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Event Volume by Indexers</title>
+      <chart>
+        <search depends="$indexer_name$">
+          <query>index="_internal" source="*/metrics.log*"  group=per_sourcetype_thruput [|inputlookup indexer_name.csv]
+                  | eval ingest_pipe = if(isnotnull(ingest_pipe), ingest_pipe, "none")
+                  | search ingest_pipe=*
+                        | fillnull value=NULL
+                        | eval gb=kb/1024/1024
+                        | stats sum(gb) AS gb by host</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Volume by SourceTypes</title>
+      <chart>
+        <search depends="$indexer_name$">
+          <query>index="_internal" source="*/metrics.log*"  [|inputlookup indexer_name.csv] group=per_sourcetype_thruput
+                  | eval ingest_pipe = if(isnotnull(ingest_pipe), ingest_pipe, "none")
+                  | search ingest_pipe=*
+                        | fillnull value=NULL
+                        | eval gb=kb/1024/1024
+                        | stats sum(gb) AS gb by series
+                        | eventstats sum(gb) as total_gb
+                        | eval gb_pct=round((gb/total_gb)*100,2)."%"
+                        | sort -gb_pct | fields - total_gb</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">396</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Volume by Indexes</title>
+      <chart>
+        <search>
+          <query>index=_internal source="*license_usage.log*" type=Usage  | eval yearmonthday=strftime(_time, "%Y%m%d") | eval yearmonth=strftime(_time, "%Y%m%d") | stats sum(eval(b/1024/1024/1024)) AS volume_b by idx | chart sum(volume_b)  by idx</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+        <option name="height">399</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="sourcetype_index_statistics">
+    <panel>
+      <title>SourceTypes Statistics</title>
+      <table>
+        <search depends="$indexer_name$">
+          <query>index="_internal" source="*/metrics.log*"  [|inputlookup indexer_name.csv]  group=per_sourcetype_thruput
+                  | eval ingest_pipe = if(isnotnull(ingest_pipe), ingest_pipe, "none")
+                  | search ingest_pipe=*
+                        | fillnull value=NULL
+                        | eval gb=kb/1024/1024
+                        | stats sum(gb) AS gb, sum(ev) AS events by series
+                        | eventstats sum(gb) as total_gb
+                        | eval gb_pct=round((gb/total_gb)*100,2)."%"
+                        | sort -gb_pct | fields - total_gb</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel>
+      <title>Indexes Statistics</title>
+      <table>
+        <search>
+          <query>index=_internal source="*license_usage.log*" type=Usage  | eval yearmonthday=strftime(_time, "%Y%m%d") | eval yearmonth=strftime(_time, "%Y%m%d")
+                        |stats sum(eval(b/1024/1024/1024)) AS volume_gb by idx
+                        |eventstats sum(volume_gb) as total_volume
+                        |eval pect=round((volume_gb/total_volume)*100,2)."%"
+                        |table idx volume_gb pect
+                        |sort -pect</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="sys4">
+    <panel>
+      <html>
+                <h2>
+                    <b>Indexing</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row id="sys5">
+    <panel>
+      <title>Indexing Events Volume(MB) per Second</title>
+      <single>
+        <search depends="$indexer_name$">
+          <query>index="_internal"  [|inputlookup indexer_name.csv] source="*metrics.log*" group=per_Sourcetype_thruput earliest=-10m
+                        | eval ingest_pipe = if(isnotnull(ingest_pipe), ingest_pipe, "none")
+                        | search ingest_pipe=*
+                        | eval mb=kb/1024/600
+                        | stats sum(mb) as mb_per_second
+                        | eval mb_per_second=round(mb_per_second,4)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="height">249</option>
+        <option name="numberPrecision">0.00</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="underLabel">MB/sec</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Indexing Queue Status</title>
+      <chart>
+        <search depends="$indexer_name$">
+          <query>index=_internal  [|inputlookup indexer_name.csv] group=queue (name=parsingqueue OR name=aggqueue OR name=typingqueue OR name=indexqueue)
+                        | eval name=case(name=="aggqueue","2 - Aggregation Queue",name=="indexqueue","4 - Indexing Queue",name=="parsingqueue","1 - Parsing Queue",name=="typingqueue","3 - Typing Queue")
+                        | eval ingest_pipe = if(isnotnull(ingest_pipe), ingest_pipe, "none")
+                        | search ingest_pipe=*
+                        | eval max=if(isnotnull(max_size_kb),max_size_kb,max_size)
+                        | eval curr=if(isnotnull(current_size_kb),current_size_kb,current_size)
+                        | eval fill_perc=round((curr/max)*100,2)
+                        | timechart minspan=1m perc90(fill_perc) by name useother=false limit=15</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="sys6">
+    <panel>
+      <html>
+                <h2>
+                    <b>Buckets</b>
+                </h2>
+            </html>
+    </panel>
+  </row>
+  <row id="sys7">
+    <panel>
+      <title>Bucket Statistics</title>
+      <table>
+        <search>
+          <query>| rest splunk_server=local /services/cluster/master/peers 
+ | stats sum(bucket_count) AS bucket_count_all 
+ | eval bucket_count = round(bucket_count_all / 1000,2)."K" 
+ | eval replication_factor = 
+     [| rest splunk_server=local /services/cluster/config 
+     | return $replication_factor ] 
+ | eval unique = round(bucket_count_all / replication_factor,2)
+ | fields bucket_count unique 
+ | rename bucket_count AS "Total Buckets", unique AS "Unique Buckets"</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="count">10</option>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+    <panel id="bucket_statistics">
+      <title>Bucket Trend</title>
+      <chart>
+        <search depends="$indexer_name$">
+          <query>index="_introspection"  [|inputlookup indexer_name.csv] sourcetype="splunk_disk_objects" component=indexes data.name=* data.total_bucket_count=* | rename data.* as * | bin _time minspan=5m  |stats max(total_bucket_count) as total_bucket_count_by_index by _time, name | stats sum(total_bucket_count_by_index) as sum_total_bucket_count by _time |</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">column</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>

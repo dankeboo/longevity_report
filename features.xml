@@ -1,0 +1,463 @@
+<dashboard version="1.1">
+<label>Splunk Features</label>
+  <search>
+    <query>
+          | rest /services/server/info |where "indexer" in(server_roles)| table host | sort host | outputlookup indexer_name.csv
+        </query>
+    <progress>
+      <unset token="indexer_name"></unset>
+    </progress>
+    <done>
+      <set token="indexer_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+        | rest /services/cluster/master/searchheads | appendcols [| rest /services/server/info | where NOT "indexer" in(server_roles) | eval master_name=host] | where NOT label=master_name | fields label|sort label | rename label as host | outputlookup sh_name.csv
+        </query>
+    <progress>
+      <unset token="sh_name"></unset>
+    </progress>
+    <done>
+      <set token="sh_name">true</set>
+    </done>
+  </search>
+  <search>
+    <query>
+          | rest /services/server/info |where NOT "indexer" in(server_roles)| table host | sort host | outputlookup master_name.csv
+        </query>
+    <progress>
+      <unset token="master_name"></unset>
+    </progress>
+    <done>
+      <set token="master_name">true</set>
+    </done>
+  </search>
+  <fieldset submitButton="false">
+    <input type="time" token="time_range">
+      <label>Time Range</label>
+      <default>
+        <earliest>-1h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <title>Crash monitor</title>
+      <chart>
+        <search>
+          <query>index=_internal source=*crash* | rex field=_raw "Crashing thread: (?&lt;crash_thread&gt;\w+)" | timechart count by crash_thread</query>
+          <earliest>$earliest$</earliest>
+          <latest>$latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+
+  <row id="label_0">
+    <panel>
+      <html>
+          <h1>Indexer clustering</h1>
+      </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Rolling restart start times</title>
+      <table>
+        <search depends="$master_name$">
+          <query>index=_internal sourcetype=splunkd [|inputlookup master_name.csv] "INFO  CMMaster - Starting a rolling restart of the peers." |sort -_time |eval start_time = _time |sort -_time |table _time</query>
+          <earliest>0</earliest>
+          <latest></latest>
+        </search>
+        <option name="count">6</option>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <set token="earliest_time">$click.value$</set>
+        </drilldown>
+      </table>
+    </panel>
+    <panel>
+      <title>Rolling restart time spent (seconds)</title>
+      <single>
+        <search>
+          <query>index=_internal source=*metrics.log name=cmmaster_service  to_fix_gen&gt;0 AND to_fix_total&gt;0 AND to_fix_rep_factor&gt;0 AND to_fix_search_factor&gt;0
+earliest=$earliest_time$
+[ search index=_internal source=*metrics.log name=cmmaster_service  to_fix_gen=0 AND to_fix_total=0 AND to_fix_rep_factor=0 AND to_fix_search_factor=0
+  earliest=$earliest_time$ |sort _time | head 1 | eval latest=_time |return latest
+]
+|  stats min(_time) as startTime max(_time) as endTime  | eval duration = endTime - startTime |table duration</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="colorMode">none</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0x53a051","0x0877a6","0xf8be34","0xf1813f","0xdc4e41"]</option>
+        <option name="rangeValues">[200,400,700,1000]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="useColors">1</option>
+      </single>
+    </panel>
+  </row>
+  <row id="label_1">
+    <panel>
+      <html>
+                <h1>Bundle Replication</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Bundle size (bytes)</title>
+      <chart>
+        <search depends="$sh_name$">
+          <query>index=_internal group=bundles_uploads name=aggregate [|inputlookup sh_name.csv] | eval bundle_size=total_bytes/success_count | timechart span=1m avg(bundle_size) by host</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">area</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Bundle replication time (seconds)</title>
+      <chart>
+        <search>
+          <query>index=_internal DistributedBundleReplicationManager sourcetype=splunkd component=DistributedBundleReplicationManager elapsed_ms=* | eval upload_elapsed_s=upload_elapsed_ms/1000 | eval elapsed_s=elapsed_ms/1000 | timechart span=1m avg(elapsed_s) avg(upload_elapsed_s)</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="label_2">
+    <panel>
+      <html>
+                <h1>Smart Store</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Upload speed(p95) M/s</title>
+      <single>
+        <search>
+          <query>index=_audit action=local_bucket_upload info=completed |  eval second = elapsed_ms/1000| eval speed = kb/second/1024 | stats p95(speed) as upload_p95_speed</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Upload speed(avg) M/s</title>
+      <single>
+        <search>
+          <query>index=_audit action=local_bucket_upload info=completed |  eval second = elapsed_ms/1000| eval speed = kb/second/1024 | stats avg(speed) as upload_avg_speed</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Download speed(p95) kb/s</title>
+      <single>
+        <search>
+          <query>index=_audit action=remote_bucket_download info=completed |  eval second = elapsed_ms/1000| eval speed = kb/second | stats p95(speed) as download_p95_speed</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Download speed(avg) kb/s</title>
+      <single>
+        <search>
+          <query>index=_audit action=remote_bucket_download info=completed |  eval second = elapsed_ms/1000| eval speed = kb/second | stats avg(speed) as download_avg_speed</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Eviction speed(p95) M/s</title>
+      <single>
+        <search>
+          <query>index=_audit action=local_bucket_evict info=completed |  eval second = elapsed_ms/1000| eval speed = kb/second/1024 | stats p95(speed) as download_p95_speed</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Eviction speed(avg) M/s</title>
+      <single>
+        <search>
+          <query>index=_audit action=local_bucket_evict info=completed |  eval second = elapsed_ms/1000| eval speed = kb/second/1024 | stats avg(speed) as download_avg_speed</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Search time - ES</title>
+        <search>
+          <query>index="_audit" info=completed action=search savedsearch_name=*Rule | timechart avg(total_run_time) by savedsearch_name useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Cache Hit Ratio - ES</title>
+        <search>
+          <query>index="_audit" info=completed action=search savedsearch_name=*Rule | rename invocations.command.search.index_bucketcache.hit as hit, invocations.command.search.index.bucketcache.miss as miss | eval hit_ratio = hit/(hit+miss+1)*100 | timechart avg(hit_ratio) by savedsearch_name useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.chart.nullValueMode">connect</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>Bucket upload/download throughput (kb/min)</title>
+        <search>
+          <query>index="_audit" (action=remote_bucket_download OR action=local_bucket_upload OR action=local_bucket_evict OR action=remote_bucket_remove) info=completed cache_id="*bid|*" | timechart span=1m sum(kb) as throughput_KB by action</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>Data model summary upload/download throughput (kb/min)</title>
+        <search>
+          <query>index="_audit" (action=remote_bucket_download OR action=local_bucket_upload OR action=local_bucket_evict OR action=remote_bucket_remove) info=completed cache_id="*dma|*" | timechart span=1m sum(kb) as throughput_KB by action</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Syslog PDV</title>
+      <chart>
+        <title>Syslog PDV</title>
+        <search>
+          <query>index=_internal source="*/metrics.log"  group=per_sourcetype_thruput series=syslog | eval gb=60*24*kb/1024/1024/5 | timechart span=5m sum(gb) cont=false useother=false limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>ES PDV</title>
+      <chart>
+        <title>ES PDV</title>
+        <search>
+          <query>index=_internal source="*/metrics.log"  group=per_sourcetype_thruput (series!=syslog AND series!=splunk* AND series!=juniper* AND series!=jboss* AND series!=akamai*)  | eval gb=60*24*kb/1024/1024/5 | timechart span=5m sum(gb) cont=false useother=false limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Canonical Data PDV(Juniper, Jboos, akamai)</title>
+      <chart>
+        <title>Syslog PDV</title>
+        <search>
+          <query>index=_internal source="*/metrics.log"  group=per_sourcetype_thruput (series=juniper* OR series=jboss* OR series=akamai*)  | eval gb=60*24*kb/1024/1024/5 | timechart span=5m sum(gb) cont=false useother=false limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="label_3">
+    <panel>
+      <html>
+                <h1>Assets</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Assets &amp; Identities</title>
+      <table depends="$table_show$">
+        <search depends="$sh_name$">
+          <query>|inputlookup sh_name.csv | head 1</query>
+          <progress>
+            <unset token="sh1_name"></unset>
+          </progress>
+          <done>
+            <set token="sh1_name">$result.host$</set>
+          </done>
+        </search>
+      </table>
+      <table>
+        <search depends="$sh1_name$">
+          <query>| rest splunk_server=$sh1_name$ /services/data/transforms/managed_lookups | search filename=*asset* OR filename=*identities* | fields filename,splunk_server,count,size,description</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </table>
+    </panel>
+  </row>
+  <row id="label_4">
+    <panel>
+      <html>
+                <h1>Notable Events</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Notable Events per Day</title>
+      <single>
+        <search>
+          <query>| tstats count where index=notable earliest=-1d</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="height">250</option>
+        <option name="refresh.display">progressbar</option>
+      </single>
+    </panel>
+    <panel>
+      <title>Notable Events by Correlation Searches</title>
+      <chart>
+        <search>
+          <query>index=notable | stats count by source</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Notable Events Trend</title>
+      <chart>
+        <search>
+          <query>index=notable | timechart minspan=1m count by source</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="label_5">
+    <panel>
+      <html>
+                <h1>KVStore Insert/Update/Return/Delete</h1>
+            </html>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>KVStore - Insert</title>
+        <search>
+          <query>index=_introspection sourcetype=kvstore component=KVStoreServerStats host=sh* | streamstats current=t global=f window=2 earliest(data.metrics.document.inserted) as e_inserted latest(data.metrics.document.inserted) as l_inserted by host | eval diff_inserted=(l_inserted-e_inserted)/30 | timechart span=1m avg(diff_inserted) as query by host limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>KVStore - Update</title>
+        <search>
+          <query>index=_introspection sourcetype=kvstore component=KVStoreServerStats host=sh* | streamstats current=t global=f window=2 earliest(data.metrics.document.updated) as e_updated latest(data.metrics.document.updated) as l_updated by host | eval diff_updated=(l_updated-e_updated)/30 | timechart span=1m avg(diff_updated) as updated by host useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <chart>
+        <title>KVStore - Return</title>
+        <search>
+          <query>index=_introspection sourcetype=kvstore component=KVStoreServerStats host=sh* | streamstats current=t global=f window=2 earliest(data.metrics.document.returned) as e_returned latest(data.metrics.document.returned) as l_returned by host | eval diff_returned=(l_returned-e_returned)/30 | timechart span=1m avg(diff_returned) as query by host useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+    <panel>
+      <chart>
+        <title>KVStore - Delete</title>
+        <search>
+          <query>index=_introspection sourcetype=kvstore component=KVStoreServerStats host=sh* | streamstats current=t global=f window=2 earliest(data.metrics.document.deleted) as e_deleted latest(data.metrics.document.deleted) as l_deleted by host | eval diff_deleted=(l_deleted-e_deleted)/30 | timechart span=1m avg(diff_deleted) as query by host useother=f limit=0</query>
+          <earliest>$time_range.earliest$</earliest>
+          <latest>$time_range.latest$</latest>
+        </search>
+        <option name="charting.chart">line</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+</dashboard>
