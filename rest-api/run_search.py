@@ -9,7 +9,7 @@ baseurl = 'https://10.224.18.195:8089'
 userName = 'admin'
 password = 'Chang3d!'
 
-searchQuery = 'search index=_introspection sourcetype=splunk_resource_usage component=Hostwide host=sh* | rename data.* as *| eval cpu=cpu_system_pct%2Bcpu_user_pct | timechart minspan=10s  avg(cpu) as cpu_usage by host limit=0'
+searchQuery = 'search index=_introspection sourcetype=splunk_resource_usage component=Hostwide host=sh* | rename data.* as *| eval cpu=cpu_system_pct+cpu_user_pct | timechart minspan=10s  avg(cpu) as cpu_usage by host limit=0'
 
 # Authenticate with server.
 # Disable SSL cert validation. Splunk certs are self-signed.
