@@ -1,3 +1,0 @@
-index=_metrics  source="*/metrics.log"  group=per_sourcetype_thruput series=syslog | eval gb=60*24*kb/1024/1024/60/24 | bucket span=1d _time| mstats span=1d sum(gb) as syslog_PVD by _time  | eval syslog_PVD=round(syslog_PVD, 1)
-
-              |table _time, syslog_PVD, ES_PVD, Canonical_PVD
