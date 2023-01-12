@@ -1,0 +1,4 @@
+splunk-sdk
+pandas
+os
+rpy2
