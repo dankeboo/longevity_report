@@ -1,0 +1,5 @@
+"type": "viz.punchcard",
+   "options": {},
+   "dataSources": {
+    "primary": "ds_product_type"
+   },
