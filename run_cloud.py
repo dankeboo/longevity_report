@@ -88,7 +88,7 @@ def do_spl_list(span, optcmd):
             search index=_introspection {optcmd} sourcetype=splunk_resource_usage component=Hostwide
             | bin _time span={span}
             | rename data.* as * 
-            | eval obj='resource'
+            | eval obj="resource"
             | eval cpu=cpu_system_pct+cpu_user_pct 
             | rename _time as time
             | stats limit=0 avg(cpu) as cpu_pct, avg(mem_used) as mem_MiB by time host obj
