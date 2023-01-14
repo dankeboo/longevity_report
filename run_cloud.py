@@ -1,4 +1,3 @@
-
 import os, io
 import pandas as pd
 from splunksdkexamples.search import main as search
@@ -21,7 +20,7 @@ def get_df_melt(d):
         print(f'something went wrong with scope: {d["scope"]} Exception: {e} was caught!!')
         return None
     else:
-        df1 = df.melt(id_vars=['metric_timestamp', 'host', 'obj'], var_name='metric_name', value_name='_value')
+        df1 = df.melt(id_vars=['time', 'host', 'obj'])
         return df1.assign(scope=[d["scope"],] * len(df1.index))
 
 def do_spl_list(span, optcmd):
@@ -91,8 +90,8 @@ def do_spl_list(span, optcmd):
             | rename data.* as * 
             | rename component as obj
             | eval cpu=cpu_system_pct+cpu_user_pct 
-            | rename _time as metric_timestamp
-            | stats limit=0 avg(cpu) as avg.cpu.pct, avg(mem_used) as avg.mem.MiB by metric_timestamp host obj
+            | rename _time as time
+            | stats limit=0 avg(cpu) as avg.cpu.pct, avg(mem_used) as avg.mem.MiB by time host obj
             """
         },
         {
@@ -103,9 +102,9 @@ def do_spl_list(span, optcmd):
             | eval gb=kb/1024/1024{proc_mp2}
             | bin _time span={span}
             | eval obj="ingestion"
-            | rename _time as metric_timestamp
+            | rename _time as time
             | eval host="clusterwide"
-            | stats sum(gb) as GB.per.Day by metric_timestamp host obj
+            | stats sum(gb) as GB.per.Day by time host obj
             """
         },
         {
@@ -116,8 +115,8 @@ def do_spl_list(span, optcmd):
             | eval gb=kb/1024/1024{proc_mp2}
             | bin _time span={span}
             | eval obj="ingestion"
-            | rename _time as metric_timestamp
-            | stats sum(gb) as GB.per.Day by metric_timestamp host obj
+            | rename _time as time
+            | stats sum(gb) as GB.per.Day by time host obj
             """
         },
         {
@@ -127,9 +126,9 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name=""
             | bin _time span={span}
             | eval obj="adhoc search"
-            |rename _time as metric_timestamp
+            |rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -140,8 +139,8 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name=""
             | bin _time span={span}
             | eval obj="adhoc search"
-            |rename _time as metric_timestamp
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            |rename _time as time
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -152,9 +151,9 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_*
             | bin _time span={span}
             | eval obj="DMA search"
-            | rename _time as metric_timestamp
+            | rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -165,8 +164,8 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_*
             | bin _time span={span}
             | eval obj="DMA search"
-            | rename _time as metric_timestamp
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            | rename _time as time
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -177,9 +176,9 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule"
             | bin _time span={span}
             | eval obj="ES correlation search"
-            | rename _time as metric_timestamp
+            | rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -190,8 +189,8 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule"
             | bin _time span={span}
             | eval obj="ES correlation search"
-            | rename _time as metric_timestamp
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            | rename _time as time
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -202,9 +201,9 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!=""
             | bin _time span={span}
             | eval obj="ES saved search"
-            | rename _time as metric_timestamp
+            | rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -215,8 +214,8 @@ def do_spl_list(span, optcmd):
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!=""
             | bin _time span={span}
             | eval obj="ES saved search"
-            | rename _time as metric_timestamp
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by metric_timestamp host obj
+            | rename _time as time
+            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
             | eval hourly.search.count=hourly.search.count{proc_mp3}
             """
         },
@@ -231,17 +230,25 @@ def do_spl_list(span, optcmd):
             | eval fd_used = fd_used{proc_mp}
             | eval t_count = t_count{proc_mp}
             | bin _time span={span}
-            | rename _time as metric_timestamp
+            | rename _time as time
             | stats limit=0 sum(pct_cpu) as avg.cpu.pct, sum(mem_used) as avg.mem.MiB
               sum(fd_used) as avg.fd.usage, sum(t_count) as avg.threads 
-             by metric_timestamp host obj
+             by time host obj
             """,
         },
         {
             "scope": "03 proc_class",
             "spl" : f"""
             search index=_introspection {optcmd} sourcetype=splunk_resource_usage component=PerProcess 
-            (host=sh1 OR host=idx1 OR host=master1)
+            (
+            host=sh-i-08d78ca895e0f82be*
+             OR 
+            host=sh-i-05c6f78a25760a5d4*
+             OR 
+            host=c0m1-i-0b25d7ecf8841a3b*
+            OR
+            host=idx-i-06b3d0c75e30d380*
+            )
             | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' 
             | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' 
             | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' 
@@ -288,13 +295,13 @@ def do_spl_list(span, optcmd):
             by _time, process_class, host 
             | bin _time span={span} 
             | rename process_class as obj
-            | rename _time as metric_timestamp
+            | rename _time as time
             | stats 
             avg(resource_usage) AS "avg.cpu.pct" 
             avg(mem_usage) AS "avg.mem.MiB" 
             avg(fd_usage) AS "avg.fd.usage"
             avg(t_usage) AS "avg.threads"
-            by metric_timestamp, host, obj
+            by time, host, obj
             """
         },
         {
@@ -304,8 +311,8 @@ def do_spl_list(span, optcmd):
             | rex field=_raw "Crashing thread: (?<crash_thread>\w+)" 
             | bin _time span={span} 
             | rename crash_thread as obj
-            | rename _time as metric_timestamp
-            | stats count by metric_timestamp host obj
+            | rename _time as time
+            | stats count by time host obj
             """
             
         },
@@ -316,9 +323,9 @@ def do_spl_list(span, optcmd):
             source=*/scheduler*.log search_type=datamodel_acceleration savedsearch_name=* status!=*_remote* 
             |rename savedsearch_name as obj
             |bin _time span={span}
-            | rename _time as metric_timestamp
+            | rename _time as time
             | stats distinct_count(scheduled_time) as total,
-            count(eval(status="success")) as successes by metric_timestamp host obj
+            count(eval(status="success")) as successes by time host obj
             | eval fails = total - successes 
             | eval failed.ratio=fails/total*100
             """
@@ -330,8 +337,8 @@ def do_spl_list(span, optcmd):
             OR action=local_bucket_evict OR action=remote_bucket_remove) info=completed cache_id="*bid|*" 
             | rename action as obj
             |bin _time span={span}
-            | rename _time as metric_timestamp
-            | stats sum(kb) as throughput.KB by metric_timestamp host obj
+            | rename _time as time
+            | stats sum(kb) as throughput.KB by time host obj
             """
         }
   
@@ -344,13 +351,10 @@ def get_results(span='1d', optcmd=''):
     )
     
 
-span='1h'
+span='5m'
 timecmd = 'earliest=-5d'
-build = 'bryllium'
-outfilename = 'test'
+build = 'ib-c11'
 
 df=get_results(span, timecmd)
 df.assign(build=[build,] * len(df.index))
-
-df=df.rename({'host':"node"}, axis=1)
-df.to_csv('/Users/yhirasawa/Desktop/pdtest.csv')
+df.to_csv('/root/yhirasawa/metrics.csv')
