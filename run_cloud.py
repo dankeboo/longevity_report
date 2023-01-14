@@ -357,4 +357,4 @@ build = 'ib-c11'
 
 df=get_results(span, timecmd)
 df.assign(build=[build,] * len(df.index))
-df.to_csv('/root/yhirasawa/metrics.csv')
+df.to_csv('/home/yhirasawa/metrics.csv')
