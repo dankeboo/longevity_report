@@ -88,10 +88,10 @@ def do_spl_list(span, optcmd):
             search index=_introspection {optcmd} sourcetype=splunk_resource_usage component=Hostwide
             | bin _time span={span}
             | rename data.* as * 
-            | rename component as obj
+            | eval obj='resource'
             | eval cpu=cpu_system_pct+cpu_user_pct 
             | rename _time as time
-            | stats limit=0 avg(cpu) as avg.cpu.pct, avg(mem_used) as avg.mem.MiB by time host obj
+            | stats limit=0 avg(cpu) as cpu_pct, avg(mem_used) as mem_MiB by time host obj
             """
         },
         {
@@ -104,7 +104,7 @@ def do_spl_list(span, optcmd):
             | eval obj="ingestion"
             | rename _time as time
             | eval host="clusterwide"
-            | stats sum(gb) as GB.per.Day by time host obj
+            | stats sum(gb) as ingestion_gb_per_day by time host obj
             """
         },
         {
@@ -116,7 +116,7 @@ def do_spl_list(span, optcmd):
             | bin _time span={span}
             | eval obj="ingestion"
             | rename _time as time
-            | stats sum(gb) as GB.per.Day by time host obj
+            | stats sum(gb) as ingestion_gb_per_day by time host obj
             """
         },
         {
@@ -128,8 +128,8 @@ def do_spl_list(span, optcmd):
             | eval obj="adhoc search"
             |rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -140,8 +140,8 @@ def do_spl_list(span, optcmd):
             | bin _time span={span}
             | eval obj="adhoc search"
             |rename _time as time
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -153,8 +153,8 @@ def do_spl_list(span, optcmd):
             | eval obj="DMA search"
             | rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -165,8 +165,8 @@ def do_spl_list(span, optcmd):
             | bin _time span={span}
             | eval obj="DMA search"
             | rename _time as time
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -178,8 +178,8 @@ def do_spl_list(span, optcmd):
             | eval obj="ES correlation search"
             | rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -190,8 +190,8 @@ def do_spl_list(span, optcmd):
             | bin _time span={span}
             | eval obj="ES correlation search"
             | rename _time as time
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -203,8 +203,8 @@ def do_spl_list(span, optcmd):
             | eval obj="ES saved search"
             | rename _time as time
             | eval host="clusterwide"
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -215,8 +215,8 @@ def do_spl_list(span, optcmd):
             | bin _time span={span}
             | eval obj="ES saved search"
             | rename _time as time
-            | stats count as hourly.search.count, avg(total_run_time) as avg.search.time by time host obj
-            | eval hourly.search.count=hourly.search.count{proc_mp3}
+            | stats count as count_per_hour, avg(total_run_time) as searchtime_sec by time host obj
+            | eval count_per_hour=count_per_hour{proc_mp3}
             """
         },
         {
@@ -231,8 +231,8 @@ def do_spl_list(span, optcmd):
             | eval t_count = t_count{proc_mp}
             | bin _time span={span}
             | rename _time as time
-            | stats limit=0 sum(pct_cpu) as avg.cpu.pct, sum(mem_used) as avg.mem.MiB
-              sum(fd_used) as avg.fd.usage, sum(t_count) as avg.threads 
+            | stats limit=0 sum(pct_cpu) as cpu_pct, sum(mem_used) as mem_MiB
+              sum(fd_used) as fd_count, sum(t_count) as thread_count 
              by time host obj
             """,
         },
@@ -297,10 +297,10 @@ def do_spl_list(span, optcmd):
             | rename process_class as obj
             | rename _time as time
             | stats 
-            avg(resource_usage) AS "avg.cpu.pct" 
-            avg(mem_usage) AS "avg.mem.MiB" 
-            avg(fd_usage) AS "avg.fd.usage"
-            avg(t_usage) AS "avg.threads"
+            avg(resource_usage) AS "cpu_pct" 
+            avg(mem_usage) AS "mem_MiB" 
+            avg(fd_usage) AS "fd_count"
+            avg(t_usage) AS "thread_count"
             by time, host, obj
             """
         },
@@ -312,7 +312,7 @@ def do_spl_list(span, optcmd):
             | bin _time span={span} 
             | rename crash_thread as obj
             | rename _time as time
-            | stats count by time host obj
+            | stats count as crash_count by time host obj
             """
             
         },
@@ -324,10 +324,10 @@ def do_spl_list(span, optcmd):
             |rename savedsearch_name as obj
             |bin _time span={span}
             | rename _time as time
-            | stats distinct_count(scheduled_time) as total,
-            count(eval(status="success")) as successes by time host obj
-            | eval fails = total - successes 
-            | eval failed.ratio=fails/total*100
+            | stats distinct_count(scheduled_time) as total_count,
+            count(eval(status="success")) as success_count by time host obj
+            | eval fail_count = total_count - success_count 
+            | eval fail_ratio=fail_count/total_count*100
             """
         },
         {
@@ -338,7 +338,7 @@ def do_spl_list(span, optcmd):
             | rename action as obj
             |bin _time span={span}
             | rename _time as time
-            | stats sum(kb) as throughput.KB by time host obj
+            | stats sum(kb) as KB_per_sec by time host obj
             """
         }
   
