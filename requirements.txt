@@ -1,4 +1,4 @@
 splunk-sdk
+python-dotenv
 pandas
-os
 rpy2
