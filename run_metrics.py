@@ -1,7 +1,7 @@
 import metricslib
 
 # hint: use sft ssh tunnel to access port 8089 in cloud env
-#  sft ssh -L 8189:localhost:8089 52.205.242.226
+#  sft ssh -L 8089:localhost:8089 52.205.242.226
 # 
 
 span='5m'
