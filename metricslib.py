@@ -95,7 +95,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "015 ingestion",
+            "scope" : "012 ingestion",
             "spl" : f"""
             search index="_internal" {optcmd} source="*/metrics.log*"  group=per_sourcetype_thruput 
             [| rest /services/server/info |where "indexer" in(server_roles)| table host | sort host]
@@ -108,7 +108,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "0151 ingestion",
+            "scope" : "0121 ingestion",
             "spl" : f"""
             search index="_internal" {optcmd} source="*/metrics.log*"  group=per_sourcetype_thruput 
             [| rest /services/server/info |where "indexer" in(server_roles)| table host | sort host]
@@ -120,7 +120,23 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "016 adhoc search",
+            "scope" : "0130 search",
+            "spl" : f"""
+            search index="_introspection"
+            sourcetype=splunk_resource_usage  component=PerProcess data.search_props.role=head 
+            data.search_props.sid::*  
+            | eval sid = "data.search_props.sid"  
+            | bin _time span=1s 
+            | stats dc(sid) AS distinct_search_count by _time  
+            | bin _time span={span}
+            | rename _time as time
+            | eval host="Clusterwide"
+            | eval obj="search"
+            | stats max(distinct_search_count) as concurrency_max by time host obj
+            """
+        },
+        {
+            "scope" : "013 adhoc search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name=""
@@ -133,7 +149,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "0161 adhoc search",
+            "scope" : "0131 adhoc search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_* search_id!=*subsearch* is_realtime=0 savedsearch_name=""
@@ -145,7 +161,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "017 DMA search",
+            "scope" : "014 DMA search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_*
@@ -158,7 +174,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "0171 DMA search",
+            "scope" : "0141 DMA search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name=*_ACCELERATE_*
@@ -170,7 +186,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "018 ES correlation search",
+            "scope" : "015 ES correlation search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule"
@@ -183,7 +199,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "0181 ES correlation search",
+            "scope" : "0151 ES correlation search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name="*- Rule"
@@ -195,7 +211,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "019 ES saved search",
+            "scope" : "016 ES saved search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!=""
@@ -208,7 +224,7 @@ def do_spl_list(span, optcmd):
             """
         },
         {
-            "scope" : "0191 ES saved search",
+            "scope" : "0161 ES saved search",
             "spl" : f"""
             search index=_audit {optcmd} 
             info=completed search_id!=*rsa_scheduler_* search_id!=*subsearch* is_realtime=0 savedsearch_name!="*- Rule" savedsearch_name!="_ACCELERATE_*" savedsearch_name!=""
