@@ -23,7 +23,7 @@ def get_df_melt(d):
         df1 = df.melt(id_vars=['time', 'host', 'obj'])
         return df1.assign(scope=[d["scope"],] * len(df1.index))
 
-def do_spl_list(span, optcmd):
+def do_spl_list(span, optcmd, host_samples):
 
     # PerProcess data is recorded every 10 seconds
     # Multipler to correct for aggregate (sum) span period
@@ -91,7 +91,26 @@ def do_spl_list(span, optcmd):
             | eval obj="resource"
             | eval cpu=cpu_system_pct+cpu_user_pct 
             | rename _time as time
-            | stats limit=0 avg(cpu) as cpu_pct, avg(mem_used) as mem_MiB by time host obj
+            | stats limit=0 
+            avg(cpu) as cpu_pct,
+            avg(mem_used) as mem_MiB, 
+            avg(pg_paged_out) as pg_paged_out, 
+            avg(pg_swapped_out) as pg_swapped_out,
+            avg(runnable_process_count) as runnable_process_count,
+            by time host obj
+            """
+        },
+        {
+            "scope" : "011 system IO",
+            "spl" : f"""
+            search index=_introspection sourcetype=splunk_resource_usage component=IOStats
+            | bin _time span=1m
+            | rename data.* as * 
+            | eval obj="disk"
+            | stats sum(reads_kb_ps) as reads_kb_ps sum(reads_ps) as reads_ps sum(writes_kb_ps) as writes_kb_ps sum(writes_ps) as writes_ps by _time host obj 
+            | bin _time span={span}
+            | rename _time as time
+            | stats  avg(reads_kb_ps) as reads_kb_ps avg(reads_ps) as reads_ps avg(writes_kb_ps) as writes_kb_ps avg(writes_ps) as writes_ps by time host obj
             """
         },
         {
@@ -126,7 +145,7 @@ def do_spl_list(span, optcmd):
             sourcetype=splunk_resource_usage  component=PerProcess data.search_props.role=head 
             data.search_props.sid::*  
             | eval sid = "data.search_props.sid"  
-            | bin _time span=1s 
+            | bin _time span=10s 
             | stats dc(sid) AS distinct_search_count by _time  
             | bin _time span={span}
             | rename _time as time
@@ -256,15 +275,7 @@ def do_spl_list(span, optcmd):
             "scope": "03 proc_class",
             "spl" : f"""
             search index=_introspection {optcmd} sourcetype=splunk_resource_usage component=PerProcess 
-            (
-            host=sh-i-08d78ca895e0f82be*
-             OR 
-            host=sh-i-05c6f78a25760a5d4*
-             OR 
-            host=c0m1-i-0b25d7ecf8841a3b*
-            OR
-            host=idx-i-06b3d0c75e30d380*
-            )
+            {host_samples}
             | eval process = 'data.process' | eval args = 'data.args' | eval pid = 'data.pid' 
             | eval ppid = 'data.ppid' | eval elapsed = 'data.elapsed' | eval mem_used = 'data.mem_used' 
             | eval mem = 'data.mem' | eval pct_memory = 'data.pct_memory' | eval pct_cpu = 'data.pct_cpu' 
@@ -333,11 +344,42 @@ def do_spl_list(span, optcmd):
             
         },
         {
-            "scope" : "05 dma_search",
+            "scope" : "0142 dma_search",
             "spl" :     f"""
             search index=_internal {optcmd} sourcetype=scheduler 
             source=*/scheduler*.log search_type=datamodel_acceleration savedsearch_name=* status!=*_remote* 
             |rename savedsearch_name as obj
+            |bin _time span={span}
+            | rename _time as time
+            | stats distinct_count(scheduled_time) as total_count,
+            count(eval(status="success")) as success_count by time host obj
+            | eval fail_count = total_count - success_count 
+            | eval fail_ratio=fail_count/total_count*100
+            """
+        },
+        {
+            "scope" : "0152 ES_correlation_search",
+            "spl" :     f"""
+            search index=_internal sourcetype=scheduler 
+            source=*/scheduler*.log
+            search_type!=datamodel_acceleration savedsearch_name="* - Rule"
+             savedsearch_name!="Access - Brute Force Access Behavior Detected - Rule"
+            status!=*_remote* 
+            |rename savedsearch_name as obj
+            |bin _time span={span}
+            | rename _time as time
+            | stats distinct_count(scheduled_time) as total_count,
+            count(eval(status="success")) as success_count by time host obj
+            | eval fail_count = total_count - success_count 
+            | eval fail_ratio=fail_count/total_count*100
+            """
+        },
+        {
+            "scope" : "0162 ES_saved_search",
+            "spl" :     f"""
+            search ndex=_internal sourcetype=scheduler source=*/scheduler*.log
+             search_type!=datamodel_acceleration savedsearch_name!="* - Rule" 
+             savedsearch_name=* status!=*_remote*             |rename savedsearch_name as obj
             |bin _time span={span}
             | rename _time as time
             | stats distinct_count(scheduled_time) as total_count,
@@ -361,7 +403,7 @@ def do_spl_list(span, optcmd):
     ]
 
 
-def get_results(span='1d', optcmd=''):
+def get_results(span='1d', optcmd='', host_samples=''):
     return pd.concat(
-        map(get_df_melt, do_spl_list(span, optcmd))
+        map(get_df_melt, do_spl_list(span, optcmd, host_samples))
     )
